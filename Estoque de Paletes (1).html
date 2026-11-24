@@ -1,0 +1,883 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Estoque de Paletes</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+/* Layout: abas fixas no topo; o Mapa reproduz a planta do galpão (5 setores, ruas entre as linhas pretas); o dock de ações fica colado no rodapé. */
+:root {
+  --bg: #f3f6f8; --surface: #ffffff; --ink: #14202b; --muted: #566878; --line: #d5dde4;
+  --accent: #0b6e8a; --accent-ink: #ffffff; --accent-soft: #def0f5; --wall: #0f4a2f;
+  --err: #b3261e; --err-soft: #fbe4e2; --ok: #1d7a42; --ok-soft: #ddf2e5; --info-soft: #e8eef3;
+  --b1: #2a8650; --b1f: #ffffff; --b2: #f0c419; --b2f: #1d1d1d;
+  --b3: #f08a24; --b3f: #1d1d1d; --b4: #cf3b2f; --b4f: #ffffff;
+  --free: #eaf0f4; --shadow: rgba(20, 32, 43, .12);
+  --font: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e151b; --surface: #172029; --ink: #e6edf2; --muted: #92a3b2; --line: #2a3945;
+    --accent: #4cc2e0; --accent-ink: #052029; --accent-soft: #123541; --wall: #4f9d78;
+    --err: #ff9188; --err-soft: #3a1815; --ok: #72d69c; --ok-soft: #143324; --info-soft: #1f2b35;
+    --b1: #3aa66a; --b1f: #04150b; --b2: #e8bf2a; --b2f: #181300;
+    --b3: #f09a3e; --b3f: #1b0e00; --b4: #e5574b; --b4f: #1d0404;
+    --free: #1d2832; --shadow: rgba(0, 0, 0, .5);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e151b; --surface: #172029; --ink: #e6edf2; --muted: #92a3b2; --line: #2a3945;
+  --accent: #4cc2e0; --accent-ink: #052029; --accent-soft: #123541; --wall: #4f9d78;
+  --err: #ff9188; --err-soft: #3a1815; --ok: #72d69c; --ok-soft: #143324; --info-soft: #1f2b35;
+  --b1: #3aa66a; --b1f: #04150b; --b2: #e8bf2a; --b2f: #181300;
+  --b3: #f09a3e; --b3f: #1b0e00; --b4: #e5574b; --b4f: #1d0404;
+  --free: #1d2832; --shadow: rgba(0, 0, 0, .5);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink); font: 400 15px/1.45 var(--font);
+  padding-block: 0 24px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); background: var(--bg); z-index: 20; }
+button, input, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.wrap { max-width: 1100px; margin: 0 auto; }
+
+header.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 15; background: var(--bg); padding: 14px 0 0; }
+.brand { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.brand h1 { font-size: 20px; line-height: 1.2; margin: 0; font-weight: 700; letter-spacing: -.01em; text-wrap: balance; }
+.status { font-size: 12px; color: var(--muted); display: inline-flex; align-items: center; gap: 6px; }
+.status i { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); display: inline-block; }
+.status.ok i { background: var(--ok); } .status.warn i { background: var(--b3); }
+.tabs { display: flex; gap: 4px; margin-top: 10px; border-bottom: 1px solid var(--line); overflow-x: auto; }
+.tab { background: none; border: 0; border-bottom: 3px solid transparent; padding: 10px 14px; font-weight: 600; color: var(--muted); white-space: nowrap; }
+.tab[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.tab .n { display: inline-block; min-width: 20px; padding: 0 6px; margin-left: 6px; border-radius: 10px; background: var(--b3); color: var(--b3f); font-size: 12px; line-height: 20px; text-align: center; }
+
+main { padding-top: 16px; display: grid; gap: 16px; }
+section[hidden] { display: none !important; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+.card h2 { margin: 0 0 10px; font-size: 15px; font-weight: 700; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.btn { border: 1px solid var(--line); background: var(--surface); border-radius: 8px; padding: 10px 14px; font-weight: 600; min-height: 44px; }
+.btn:hover:not(:disabled) { border-color: var(--accent); }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.btn.danger { color: var(--err); border-color: var(--err); }
+.btn.danger.armed { background: var(--err); color: #fff; }
+.btn.small { min-height: 34px; padding: 6px 10px; font-size: 13px; }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.hint { color: var(--muted); font-size: 13px; margin: 6px 0 0; }
+
+.fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin-bottom: 10px; }
+.fields label, .cfg label { display: grid; gap: 4px; font-size: 13px; font-weight: 600; color: var(--muted); min-width: 0; }
+select, .fields input, .cfg input { padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); min-height: 44px; width: 100%; min-width: 0; }
+select:disabled { opacity: .6; }
+
+/* Entrada */
+.scanbox label { display: block; font-weight: 700; margin-bottom: 8px; }
+.scanbox input { width: 100%; font: 500 22px/1.2 var(--mono); padding: 16px; border: 2px solid var(--accent); border-radius: 10px; background: var(--bg); }
+#scanmsg { min-height: 24px; margin-top: 10px; font-weight: 600; }
+#scanmsg.ok { color: var(--ok); } #scanmsg.err { color: var(--err); }
+.prog .big { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.prog .num { font: 600 56px/1 var(--mono); }
+.prog .of { color: var(--muted); font-size: 16px; }
+.prog .eggs { font-weight: 600; margin-top: 4px; }
+.sq { display: flex; flex-wrap: wrap; gap: 4px; margin: 12px 0 14px; }
+.sq i { width: 18px; height: 18px; border-radius: 4px; background: var(--free); border: 1px solid var(--line); }
+.sq i.f { background: var(--accent); border-color: var(--accent); }
+.codes { list-style: none; margin: 12px 0 0; padding: 0; max-height: 260px; overflow-y: auto; border: 1px solid var(--line); border-radius: 8px; }
+.codes li { display: flex; align-items: center; gap: 10px; padding: 6px 10px; border-bottom: 1px solid var(--line); font-size: 13px; }
+.codes li:last-child { border-bottom: 0; }
+.codes .i { color: var(--muted); width: 28px; text-align: right; }
+.codes .c { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.codes button { background: none; border: 0; color: var(--muted); font-size: 18px; padding: 2px 8px; }
+.notice { border-radius: 10px; padding: 12px 14px; background: var(--info-soft); }
+.notice.ok { background: var(--ok-soft); }
+.plist { display: grid; gap: 8px; }
+.plist .it { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; }
+.plist .it .m { color: var(--muted); font-size: 13px; }
+
+/* Mapa */
+.legend { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; font-size: 13px; font-weight: 600; white-space: nowrap; border: 0; }
+.b1 { background: var(--b1); color: var(--b1f); } .b2 { background: var(--b2); color: var(--b2f); }
+.b3 { background: var(--b3); color: var(--b3f); } .b4 { background: var(--b4); color: var(--b4f); }
+.b0 { background: var(--free); color: var(--ink); border: 1px solid var(--line); }
+button.chip[aria-pressed="true"] { outline: 2px solid var(--ink); outline-offset: 1px; }
+.sub { margin: 14px 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; }
+.pscroll { overflow-x: auto; padding-bottom: 4px; }
+.plan { display: grid; grid-template-areas: "tl tm r" "bl bm r"; grid-template-columns: auto auto auto; gap: 36px 40px; width: max-content; min-width: 100%; border: 3px solid var(--wall); border-radius: 6px; padding: 14px; background: var(--surface); justify-content: space-between; }
+.blk { min-width: 0; align-self: start; }
+.blk h3 { margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+.sts.v { display: flex; }
+.st.v { display: grid; gap: 6px; align-content: start; padding: 0 8px; border-right: 3px solid var(--ink); min-width: 62px; }
+.st.v:first-child { padding-left: 0; }
+.sts.h { display: grid; }
+.st.h { display: grid; grid-template-columns: 22px repeat(var(--n), minmax(52px, 1fr)); gap: 6px; align-items: center; padding: 6px 0; border-bottom: 3px solid var(--ink); }
+.sn { font: 500 11px var(--mono); color: var(--muted); text-align: center; }
+.cell { position: relative; min-height: 58px; border-radius: 6px; border: 1px solid transparent; display: grid; place-items: center; align-content: center; padding: 2px; line-height: 1.15; }
+.cell .pn { font: 500 10px var(--mono); opacity: .75; }
+.cell .pt { font: 700 12px var(--mono); }
+.cell .ag { font: 600 11px var(--mono); }
+.cell.free { background: var(--free); border: 1px dashed var(--line); color: var(--muted); }
+.cell.free .pn { font-size: 13px; opacity: 1; }
+.cell.sel { border: 2px solid var(--accent); background: var(--accent-soft); color: var(--ink); }
+.cell.on { outline: 3px solid var(--ink); outline-offset: 1px; }
+.cell.dim { opacity: .2; }
+.cell.part::after { content: ""; position: absolute; top: 3px; right: 3px; width: 8px; height: 8px; border-radius: 50%; border: 2px solid currentColor; }
+.dock { position: sticky; bottom: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px 14px calc(14px + env(safe-area-inset-bottom, 0px)); box-shadow: 0 -6px 18px var(--shadow); z-index: 5; }
+.dock-h { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+dl.kv { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; margin: 0 0 10px; }
+dl.kv dt { color: var(--muted); } dl.kv dd { margin: 0; font-weight: 600; }
+details { margin-bottom: 10px; } summary { cursor: pointer; font-weight: 600; }
+.hist { margin: 8px 0 0; padding-left: 18px; font-size: 13px; }
+
+/* Estoque e Produção */
+.tools { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+.tools input[type="search"] { flex: 1; min-width: 200px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); min-height: 44px; }
+.tools label.ck { display: inline-flex; gap: 8px; align-items: center; }
+.tscroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; min-width: 640px; }
+th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+th { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); white-space: nowrap; }
+td.num, th.num { text-align: right; }
+tr:last-child td { border-bottom: 0; }
+tfoot td { font-weight: 700; background: var(--bg); }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.kpi { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
+.kpi span { display: block; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; }
+.kpi b { font: 600 30px/1.2 var(--mono); }
+.h3t { margin: 0 0 8px; font-size: 15px; }
+
+/* Ajustes */
+.cfg { display: grid; gap: 10px; }
+.cfg .line { display: grid; grid-template-columns: 90px 1fr 110px auto; gap: 8px; align-items: end; }
+.cfg .line.blkl { grid-template-columns: 1fr 80px 90px 1fr 1fr auto; }
+.cfg .three { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+
+#toast { position: fixed; left: 50%; transform: translateX(-50%); top: calc(env(safe-area-inset-top, 0px) + 10px); z-index: 30; max-width: min(92vw, 520px); padding: 12px 16px; border-radius: 10px; background: var(--ink); color: var(--bg); font-weight: 600; box-shadow: 0 6px 24px var(--shadow); }
+#toast.err { background: var(--err); color: #fff; }
+@media (max-width: 560px) {
+  .prog .num { font-size: 44px; }
+  .cfg .line, .cfg .line.blkl { grid-template-columns: 1fr 1fr; }
+}
+@media (prefers-reduced-motion: no-preference) { .cell, .btn { transition: border-color .12s, background .12s; } }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div class="brand">
+      <h1>Estoque de Paletes</h1>
+      <span class="status" id="status"><i></i><span>Conectando…</span></span>
+    </div>
+    <nav class="tabs" role="tablist" id="tabs"></nav>
+  </header>
+
+  <main>
+    <section id="v-entrada" role="tabpanel">
+      <div class="card" style="margin-bottom:16px">
+        <h2>Dados do palete</h2>
+        <div class="fields">
+          <label>Produto<select id="e-product" data-ent="product"></select></label>
+          <label>Data de produção<input type="date" id="e-prod" data-ent="prodDate"></label>
+          <label>Entrada em<input type="datetime-local" id="e-at" data-ent="entryAt"></label>
+        </div>
+        <p class="hint">Deixe “Entrada em” vazio para usar o horário em que o palete for salvo. O produto fica travado enquanto houver caixas bipadas.</p>
+      </div>
+      <div class="card scanbox">
+        <label for="scan">Bipe o selo de cada caixa</label>
+        <input id="scan" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Aponte o leitor para o código de barras">
+        <div id="scanmsg" role="status" aria-live="polite"></div>
+      </div>
+      <div id="ent-dyn" style="display:grid;gap:16px;margin-top:16px"></div>
+    </section>
+
+    <section id="v-mapa" role="tabpanel" hidden></section>
+
+    <section id="v-estoque" role="tabpanel" hidden>
+      <div class="tools">
+        <input type="search" id="q" placeholder="Buscar por palete, produto ou código de uma caixa" aria-label="Buscar">
+        <label class="ck"><input type="checkbox" id="showout"> Mostrar paletes com saída</label>
+      </div>
+      <div id="est-dyn" style="margin-top:14px"></div>
+    </section>
+
+    <section id="v-producao" role="tabpanel" hidden>
+      <div class="card">
+        <h2>Período</h2>
+        <div class="fields">
+          <label>Filtrar por<select id="r-field" data-rep="field"><option value="prod">Data de produção</option><option value="entry">Data de entrada</option></select></label>
+          <label>De<input type="date" id="r-from" data-rep="from"></label>
+          <label>Até<input type="date" id="r-to" data-rep="to"></label>
+        </div>
+        <div class="row">
+          <button class="btn small" data-act="rep-preset" data-days="1">Hoje</button>
+          <button class="btn small" data-act="rep-preset" data-days="7">Últimos 7 dias</button>
+          <button class="btn small" data-act="rep-preset" data-days="30">Últimos 30 dias</button>
+          <button class="btn small" data-act="rep-preset" data-days="0">Tudo</button>
+        </div>
+      </div>
+      <div id="rep-dyn" style="display:grid;gap:16px;margin-top:16px"></div>
+    </section>
+
+    <section id="v-ajustes" role="tabpanel" hidden></section>
+  </main>
+</div>
+<div id="toast" hidden role="status" aria-live="polite"></div>
+
+<script>
+(function () {
+  'use strict';
+  var $ = function (s) { return document.querySelector(s); };
+  var esc = function (s) { return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
+  var clone = function (o) { return JSON.parse(JSON.stringify(o)); };
+  var nf = function (n) { return Number(n || 0).toLocaleString('pt-BR'); };
+  var pad = function (n) { return String(n).padStart(2, '0'); };
+
+  var DEF = {
+    palletSize: 25,
+    blocks: [
+      { id: 'sa', name: 'Setor A', streets: 6, positions: 4, orient: 'v', area: 'tl' },
+      { id: 'sb', name: 'Setor B', streets: 3, positions: 3, orient: 'v', area: 'tm' },
+      { id: 'sc', name: 'Setor C', streets: 6, positions: 5, orient: 'v', area: 'bl' },
+      { id: 'sd', name: 'Setor D', streets: 3, positions: 5, orient: 'v', area: 'bm' },
+      { id: 'se', name: 'Setor E', streets: 10, positions: 5, orient: 'h', area: 'r' }
+    ],
+    products: [
+      { code: 'EGB', name: 'Embalado Grande Branco', eggsPerBox: 300 },
+      { code: 'EEB', name: 'Embalado Extra Branco', eggsPerBox: 200 }
+    ],
+    bands: [7, 14, 21]
+  };
+
+  var AREAS = [['tl', 'Superior esquerdo'], ['tm', 'Superior centro'], ['r', 'Direita (altura toda)'], ['bl', 'Inferior esquerdo'], ['bm', 'Inferior centro']];
+  var areaOk = function (a) { return AREAS.some(function (x) { return x[0] === a; }); };
+
+  var S = {
+    tab: 'entrada', pallets: {}, cfg: clone(DEF), cfgDraft: null, loaded: false, slow: false, err: '',
+    draft: [], entry: { product: '', prodDate: '', entryAt: '' },
+    arm: '', lastClosed: '', detailId: '', placing: emptyPlacing(), mapProd: '',
+    q: '', showOut: false, mode: '', rep: { field: 'prod', from: '', to: '' }
+  };
+  var store = null, toastT = 0, actx = null, boxIdx = new Map();
+  var DRAFT_KEY = 'estoque-paletes.rascunho';
+
+  function emptyPlacing() { return { palletId: '', block: '', street: null, pos: null }; }
+
+  /* ---------- datas ---------- */
+  function dstr(d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
+  function todayStr() { return dstr(new Date()); }
+  function localDay(iso) { var d = new Date(iso); return isNaN(d) ? '' : dstr(d); }
+  function parseDay(s) { var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s || ''); return m ? new Date(+m[1], +m[2] - 1, +m[3]) : new Date(NaN); }
+  function fmtDay(s) { var d = parseDay(s); return isNaN(d) ? '—' : d.toLocaleDateString('pt-BR'); }
+  function fmtDT(iso) { try { return new Date(iso).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }); } catch (e) { return '—'; } }
+  function ageDays(day) {
+    var d = parseDay(day); if (isNaN(d)) return 0;
+    var t = new Date(); t.setHours(0, 0, 0, 0);
+    return Math.max(0, Math.round((t - d) / 864e5));
+  }
+  function band(d) { var b = S.cfg.bands; return d <= b[0] ? 1 : d <= b[1] ? 2 : d <= b[2] ? 3 : 4; }
+  function dias(n) { return n === 0 ? 'hoje' : n === 1 ? '1 dia' : n + ' dias'; }
+  function bandLabel(i) {
+    var b = S.cfg.bands;
+    return i === 1 ? 'até ' + b[0] + ' dias' : i === 2 ? (b[0] + 1) + '–' + b[1] + ' dias' : i === 3 ? (b[1] + 1) + '–' + b[2] + ' dias' : 'mais de ' + b[2] + ' dias';
+  }
+
+  /* ---------- consultas ---------- */
+  function blockOf(id) { return S.cfg.blocks.filter(function (b) { return b.id === id; })[0]; }
+  function productByCode(c) { return S.cfg.products.filter(function (p) { return p.code === c; })[0]; }
+  function locText(p) {
+    if (p.status !== 'estoque') return '';
+    var b = blockOf(p.block);
+    return (b ? b.name : '(setor removido)') + ' · Rua ' + p.street + ' · Posição ' + p.pos;
+  }
+  function locOrState(p) { return p.status === 'estoque' ? locText(p) : p.status === 'pendente' ? 'Aguardando endereço' : 'Saiu em ' + fmtDay(localDay(p.saidaAt)); }
+  function list() { return Object.keys(S.pallets).map(function (id) { return Object.assign({ id: id }, S.pallets[id]); }); }
+  function pendingList() { return list().filter(function (p) { return p.status === 'pendente'; }).sort(function (a, b) { return a.createdAt < b.createdAt ? -1 : 1; }); }
+  var ck = function (b, r, c) { return b + '|' + r + '|' + c; };
+  function occMap() {
+    var m = new Map();
+    list().forEach(function (p) { if (p.status === 'estoque' && p.block) m.set(ck(p.block, p.street, p.pos), p); });
+    return m;
+  }
+  function eggsOf(p) { return (p.count || 0) * (p.eggsPerBox || 0); }
+
+  /* ---------- avisos ---------- */
+  function beep(ok) {
+    try {
+      actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+      var o = actx.createOscillator(), g = actx.createGain();
+      o.connect(g); g.connect(actx.destination);
+      o.frequency.value = ok ? 880 : 220; g.gain.value = 0.05;
+      o.start(); o.stop(actx.currentTime + (ok ? 0.08 : 0.3));
+    } catch (e) { /* sem áudio */ }
+  }
+  function toast(msg, kind) {
+    var t = $('#toast'); t.textContent = msg; t.className = kind === 'err' ? 'err' : ''; t.hidden = false;
+    clearTimeout(toastT); toastT = setTimeout(function () { t.hidden = true; }, 4500);
+  }
+  function flash(kind, msg) { var m = $('#scanmsg'); m.className = kind; m.textContent = msg; beep(kind === 'ok'); }
+  function errText(e) {
+    var c = e && e.code;
+    if (c === 'invalid_argument' && S.mode === 'db') return 'Sem permissão para gravar. Peça ao dono do artefato acesso de Colaborador ou Editor.';
+    if (c === 'quota_exceeded') return 'Limite de registros do banco atingido.';
+    return 'Não foi possível gravar agora. Tente de novo.';
+  }
+
+  /* ---------- configuração ---------- */
+  function normCfg(c) {
+    var out = clone(DEF);
+    if (c && typeof c === 'object') {
+      if (Number.isInteger(c.palletSize) && c.palletSize > 0 && c.palletSize <= 200) out.palletSize = c.palletSize;
+      if (Array.isArray(c.blocks)) {
+        var bl = c.blocks.filter(function (b) { return b && b.id && b.name && Number.isInteger(b.streets) && b.streets > 0 && Number.isInteger(b.positions) && b.positions > 0 && areaOk(b.area); })
+          .map(function (b) { return { id: String(b.id), name: String(b.name), streets: b.streets, positions: b.positions, orient: b.orient === 'h' ? 'h' : 'v', area: b.area }; });
+        if (bl.length) out.blocks = bl;
+      }
+      if (Array.isArray(c.products)) {
+        var pr = c.products.filter(function (p) { return p && p.code && p.name && Number.isFinite(p.eggsPerBox) && p.eggsPerBox > 0; })
+          .map(function (p) { return { code: String(p.code), name: String(p.name), eggsPerBox: p.eggsPerBox }; });
+        if (pr.length) out.products = pr;
+      }
+      if (Array.isArray(c.bands) && c.bands.length === 3 && c.bands.every(Number.isFinite)) out.bands = c.bands.map(Number);
+    }
+    return out;
+  }
+  function loadDraft() {
+    try {
+      var d = JSON.parse(localStorage.getItem(DRAFT_KEY) || 'null');
+      if (Array.isArray(d)) return { codes: d.filter(function (x) { return typeof x === 'string'; }) };
+      if (d && Array.isArray(d.codes)) return d;
+    } catch (e) { /* sem rascunho */ }
+    return { codes: [] };
+  }
+  function saveDraft() {
+    try { localStorage.setItem(DRAFT_KEY, JSON.stringify({ codes: S.draft, product: S.entry.product, prodDate: S.entry.prodDate, entryAt: S.entry.entryAt })); } catch (e) { /* ignora */ }
+  }
+
+  /* ---------- armazenamento ---------- */
+  function localStore() {
+    var KEY = 'estoque-paletes.v2', data = null;
+    try { data = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) { data = null; }
+    data = data || { pallets: {}, config: null };
+    var save = function () { try { localStorage.setItem(KEY, JSON.stringify(data)); } catch (e) { /* só memória */ } };
+    var emit = function () { onData(clone(data.pallets), data.config, true); };
+    return {
+      mode: 'local',
+      start: emit,
+      setPallet: function (id, o) { data.pallets[id] = clone(o); save(); emit(); return Promise.resolve(); },
+      patchPallet: function (id, p) { data.pallets[id] = Object.assign({}, data.pallets[id], clone(p)); save(); emit(); return Promise.resolve(); },
+      delPallet: function (id) { delete data.pallets[id]; save(); emit(); return Promise.resolve(); },
+      setConfig: function (c) { data.config = clone(c); save(); emit(); return Promise.resolve(); }
+    };
+  }
+  function dbStore(db) {
+    var pc = db.collection('pallets'), cfgRef = db.doc('config/layout');
+    return {
+      mode: 'db',
+      start: function () {
+        var pallets = {}, cfg = null, gotP = false, gotC = false;
+        var push = function () { onData(pallets, cfg, gotP && gotC); };
+        var onErr = function (e) { S.err = (e && e.code) || 'unavailable'; renderStatus(); };
+        pc.onSnapshot(function (snap) {
+          pallets = {};
+          snap.docs.forEach(function (d) { pallets[d.id] = d.data(); });
+          gotP = true; push();
+        }, onErr);
+        cfgRef.onSnapshot(function (s) { cfg = s.exists ? s.data() : null; gotC = true; push(); }, onErr);
+      },
+      setPallet: function (id, o) { return pc.doc(id).set(o); },
+      patchPallet: function (id, p) { return pc.doc(id).update(p); },
+      delPallet: function (id) { return pc.doc(id).delete(); },
+      setConfig: function (c) { return cfgRef.set(c); }
+    };
+  }
+
+  function onData(p, c, loaded) {
+    S.cfg = normCfg(c); S.loaded = !!loaded;
+    if (loaded) S.slow = false;
+    S.pallets = {};
+    Object.keys(p || {}).forEach(function (id) {
+      var x = Object.assign({}, p[id]);
+      if (x.status === 'estoque') { /* endereço que não existe mais na planta volta a aguardar endereço */
+        var bk0 = blockOf(x.block);
+        if (!bk0 || !(x.street >= 1 && x.street <= bk0.streets) || !(x.pos >= 1 && x.pos <= bk0.positions)) x.status = 'pendente';
+      }
+      if (!x.prodDate) x.prodDate = localDay(x.createdAt);
+      if (!x.product) x.product = '—';
+      if (!x.eggsPerBox) x.eggsPerBox = 0;
+      if (!x.size) x.size = S.cfg.palletSize;
+      x.partial = x.partial === true || (x.count || 0) < x.size;
+      S.pallets[id] = x;
+    });
+    boxIdx = new Map();
+    Object.keys(S.pallets).forEach(function (id) { (S.pallets[id].boxes || []).forEach(function (b) { boxIdx.set(b, { id: id, code: S.pallets[id].code }); }); });
+    if (S.detailId && !S.pallets[S.detailId]) S.detailId = '';
+    if (!S.cfgDraft) S.cfgDraft = clone(S.cfg);
+    fillProducts();
+    renderStatus(); renderTabs(); renderTab();
+  }
+  function fillProducts() {
+    var sel = $('#e-product'), sig = JSON.stringify(S.cfg.products);
+    if (sel.dataset.sig === sig) return;
+    sel.dataset.sig = sig;
+    if (!productByCode(S.entry.product)) S.entry.product = S.cfg.products[0].code;
+    sel.innerHTML = S.cfg.products.map(function (p) { return '<option value="' + esc(p.code) + '">' + esc(p.code + ' · ' + p.name + ' (' + nf(p.eggsPerBox) + ' ovos/caixa)') + '</option>'; }).join('');
+    sel.value = S.entry.product;
+  }
+
+  /* ---------- bipagem ---------- */
+  function onScan(raw) {
+    var code = String(raw || '').trim();
+    if (!code) return;
+    if (!store) return flash('err', 'Aguarde, conectando…');
+    if (!parseDay(S.entry.prodDate).getTime()) return flash('err', 'Informe a data de produção antes de bipar.');
+    if (!productByCode(S.entry.product)) return flash('err', 'Escolha o produto antes de bipar.');
+    S.arm = '';
+    if (S.draft.indexOf(code) >= 0) return flash('err', 'Essa caixa já foi bipada neste palete.');
+    var own = boxIdx.get(code);
+    if (own) return flash('err', 'Essa caixa já está no palete ' + own.code + '.');
+    S.draft.push(code); saveDraft();
+    flash('ok', 'Caixa ' + S.draft.length + ' de ' + S.cfg.palletSize + ' registrada');
+    if (S.draft.length >= S.cfg.palletSize) closePallet(); else renderEntrada();
+  }
+  function newCode() {
+    var d = new Date();
+    var base = 'PAL-' + String(d.getFullYear()).slice(2) + pad(d.getMonth() + 1) + pad(d.getDate()) + '-' + pad(d.getHours()) + pad(d.getMinutes());
+    var used = {}; list().forEach(function (p) { used[p.code] = 1; });
+    var code = base, i = 0;
+    while (used[code]) { i++; code = base + String.fromCharCode(96 + i); }
+    return code;
+  }
+  async function closePallet() {
+    if (!S.draft.length || !store) return;
+    var pr = productByCode(S.entry.product);
+    if (!pr) return toast('Escolha o produto do palete.', 'err');
+    if (!parseDay(S.entry.prodDate).getTime()) return toast('Informe a data de produção.', 'err');
+    var now = new Date().toISOString(), at = now;
+    if (S.entry.entryAt) {
+      var t = new Date(S.entry.entryAt);
+      if (isNaN(t)) return toast('Data e hora de entrada inválidas.', 'err');
+      at = t.toISOString();
+    }
+    var id = 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+    var n = S.draft.length;
+    var rec = {
+      code: newCode(), product: pr.code, productName: pr.name, eggsPerBox: pr.eggsPerBox,
+      boxes: S.draft.slice(), count: n, size: S.cfg.palletSize, partial: n < S.cfg.palletSize,
+      prodDate: S.entry.prodDate, createdAt: at, savedAt: now,
+      status: 'pendente', block: null, street: null, pos: null, placedAt: null, history: []
+    };
+    try { await store.setPallet(id, rec); }
+    catch (e) { toast(errText(e), 'err'); renderEntrada(); return; }
+    S.draft = []; S.entry.entryAt = ''; $('#e-at').value = ''; saveDraft(); S.arm = ''; S.lastClosed = id;
+    flash('ok', 'Palete ' + rec.code + ' salvo: ' + n + ' caixas de ' + pr.code + ', ' + nf(n * pr.eggsPerBox) + ' ovos.');
+    renderEntrada(); renderTabs();
+  }
+
+  /* ---------- endereçamento ---------- */
+  function placeOptions() {
+    var opts = pendingList(), mv = S.placing.palletId && S.pallets[S.placing.palletId];
+    if (mv && mv.status === 'estoque') opts = [Object.assign({ id: S.placing.palletId }, mv)].concat(opts);
+    return opts;
+  }
+  async function confirmPlace() {
+    var opts = placeOptions(), pid = S.placing.palletId || (opts[0] && opts[0].id);
+    var p = S.pallets[pid], pl = S.placing;
+    if (!p || !pl.block || !pl.street || !pl.pos) return;
+    var other = occMap().get(ck(pl.block, pl.street, pl.pos));
+    if (other && other.id !== pid) { toast('Essa posição já está ocupada pelo palete ' + other.code + '.', 'err'); renderMapa(); return; }
+    var now = new Date().toISOString();
+    var bn = blockOf(pl.block).name, to = bn + ' · Rua ' + pl.street + ' · Posição ' + pl.pos;
+    var hist = (p.history || []).concat([{ at: now, from: p.status === 'estoque' ? locText(p) : 'Entrada', to: to }]);
+    try { await store.patchPallet(pid, { status: 'estoque', block: pl.block, street: pl.street, pos: pl.pos, placedAt: now, history: hist }); }
+    catch (e) { toast(errText(e), 'err'); return; }
+    S.placing = emptyPlacing(); S.detailId = '';
+    toast('Palete ' + p.code + ' guardado em ' + to);
+    renderMapa(); renderTabs();
+  }
+  async function palletOut(id) {
+    var p = S.pallets[id]; if (!p) return;
+    var now = new Date().toISOString();
+    var hist = (p.history || []).concat([{ at: now, from: locText(p) || 'Aguardando endereço', to: 'Saída do estoque' }]);
+    try { await store.patchPallet(id, { status: 'saida', block: null, street: null, pos: null, saidaAt: now, history: hist }); }
+    catch (e) { toast(errText(e), 'err'); return; }
+    S.detailId = ''; S.arm = ''; toast('Saída registrada para ' + p.code); renderMapa(); renderTabs();
+  }
+  async function palletDelete(id) {
+    var p = S.pallets[id]; if (!p) return;
+    try { await store.delPallet(id); }
+    catch (e) { toast(errText(e), 'err'); return; }
+    S.detailId = ''; S.arm = ''; toast('Registro de ' + p.code + ' excluído'); renderMapa(); renderTabs();
+  }
+
+  /* ---------- renderização ---------- */
+  function renderStatus() {
+    var el = $('#status'), cls = 'status', txt;
+    if (S.err) { cls += ' warn'; txt = S.err === 'revoked' ? 'Sem acesso aos dados' : 'Erro ao ler os dados'; }
+    else if (!store) txt = 'Conectando…';
+    else if (!S.loaded) { cls += S.slow ? ' warn' : ''; txt = S.slow ? 'Dados ainda não chegaram; pode estar sem conexão' : 'Carregando dados…'; }
+    else if (S.mode === 'local') { cls += ' warn'; txt = 'Salvo só neste navegador'; }
+    else { cls += ' ok'; txt = 'Dados compartilhados'; }
+    el.className = cls; el.querySelector('span').textContent = txt;
+  }
+  function renderTabs() {
+    var pend = pendingList().length;
+    var tabs = [['entrada', 'Entrada'], ['mapa', 'Mapa'], ['estoque', 'Estoque'], ['producao', 'Produção'], ['ajustes', 'Ajustes']];
+    $('#tabs').innerHTML = tabs.map(function (t) {
+      var badge = t[0] === 'mapa' && pend ? '<span class="n" title="Paletes aguardando endereço">' + pend + '</span>' : '';
+      return '<button class="tab" role="tab" data-act="tab" data-tab="' + t[0] + '" aria-selected="' + (S.tab === t[0]) + '">' + t[1] + badge + '</button>';
+    }).join('');
+  }
+  function renderTab() {
+    ['entrada', 'mapa', 'estoque', 'producao', 'ajustes'].forEach(function (k) { $('#v-' + k).hidden = S.tab !== k; });
+    if (S.tab === 'entrada') renderEntrada();
+    else if (S.tab === 'mapa') renderMapa();
+    else if (S.tab === 'estoque') renderEstoque();
+    else if (S.tab === 'producao') renderProducao();
+    else renderAjustes();
+  }
+
+  function renderEntrada() {
+    var size = S.cfg.palletSize, n = S.draft.length, pend = pendingList(), pr = productByCode(S.entry.product);
+    $('#e-product').disabled = n > 0;
+    var sq = '';
+    if (size <= 100) for (var i = 0; i < size; i++) sq += '<i class="' + (i < n ? 'f' : '') + '"></i>';
+    var closeLabel = n >= size ? 'Fechar palete (' + n + ')' : S.arm === 'close' ? 'Confirmar: salvar com ' + n + ' de ' + size + ' caixas' : 'Salvar palete incompleto (' + n + ' de ' + size + ')';
+    var eggs = pr ? nf(n) + (n === 1 ? ' caixa' : ' caixas') + ' × ' + nf(pr.eggsPerBox) + ' ovos = ' + nf(n * pr.eggsPerBox) + ' ovos' : '';
+    var lastHtml = '', lc = S.lastClosed && S.pallets[S.lastClosed];
+    if (lc && lc.status === 'pendente') {
+      lastHtml = '<div class="notice ok"><strong>Palete ' + esc(lc.code) + ' salvo' + (lc.partial ? ' (incompleto, ' + lc.count + ' de ' + lc.size + ' caixas)' : ' com ' + lc.count + ' caixas') + '.</strong> Falta escolher onde ele vai ficar.<div class="row" style="margin-top:10px"><button class="btn primary" data-act="place-now" data-id="' + esc(S.lastClosed) + '">Endereçar agora</button></div></div>';
+    }
+    var codes = '';
+    if (n) {
+      codes = '<ul class="codes">' + S.draft.map(function (c, i) { return { c: c, i: i }; }).reverse().map(function (x) {
+        return '<li><span class="i mono">' + (x.i + 1) + '</span><span class="c mono">' + esc(x.c) + '</span><button data-act="rm" data-i="' + x.i + '" aria-label="Remover caixa ' + (x.i + 1) + '">×</button></li>';
+      }).join('') + '</ul>';
+    }
+    var pendHtml = '';
+    if (pend.length) {
+      pendHtml = '<div class="card"><h2>Aguardando endereço (' + pend.length + ')</h2><div class="plist">' + pend.map(function (p) {
+        return '<div class="it"><div><strong class="mono">' + esc(p.code) + '</strong> <span class="chip b0">' + esc(p.product) + '</span>' + (p.partial ? ' <span class="chip b0">incompleto</span>' : '') + '<div class="m">' + p.count + ' caixas · ' + nf(eggsOf(p)) + ' ovos · produção ' + esc(fmtDay(p.prodDate)) + '</div></div><button class="btn small primary" data-act="place-now" data-id="' + esc(p.id) + '">Endereçar</button></div>';
+      }).join('') + '</div></div>';
+    }
+    $('#ent-dyn').innerHTML = lastHtml +
+      '<div class="card prog"><div class="big"><span class="num">' + n + '</span><span class="of">de ' + size + ' caixas · ' + esc(S.entry.product || '—') + '</span></div>' +
+      '<div class="eggs">' + esc(eggs) + '</div>' +
+      '<div class="sq" aria-hidden="true">' + sq + '</div>' +
+      '<div class="row"><button class="btn primary" data-act="close"' + (n ? '' : ' disabled') + '>' + esc(closeLabel) + '</button>' +
+      '<button class="btn' + (S.arm === 'clear' ? ' danger armed' : '') + '" data-act="clear"' + (n ? '' : ' disabled') + '>' + (S.arm === 'clear' ? 'Confirmar: descartar bipagens' : 'Limpar') + '</button></div>' +
+      '<p class="hint">Com ' + size + ' caixas o palete fecha sozinho. Se a produção acabar antes, use “Salvar palete incompleto”.</p>' + codes + '</div>' +
+      pendHtml +
+      '<details class="card"><summary>Ferramentas de teste</summary><p class="hint">Gera códigos fictícios (TESTE-…) para treinar sem selos. Depois, exclua os paletes de teste na aba Mapa.</p><div class="row" style="margin-top:10px"><button class="btn small" data-act="sim">Simular bipagem do palete inteiro</button></div></details>';
+  }
+
+  function renderMapa() {
+    var occ = occMap(), cfg = S.cfg, total = 0, used = 0, counts = [0, 0, 0, 0, 0], byProd = {}, oldest = null, filt = S.mapProd;
+    var blocks = cfg.blocks.map(function (b) {
+      var lanes = '', ori = b.orient === 'h' ? 'h' : 'v';
+      for (var r = 1; r <= b.streets; r++) {
+        var cells = '';
+        for (var c = 1; c <= b.positions; c++) {
+          total++;
+          var p = occ.get(ck(b.id, r, c)), at = ' data-act="cell" data-block="' + esc(b.id) + '" data-street="' + r + '" data-pos="' + c + '"';
+          if (p) {
+            used++; var d = ageDays(p.prodDate), bd = band(d); counts[bd]++; byProd[p.product] = (byProd[p.product] || 0) + 1;
+            if (!oldest || d > oldest.d) oldest = { d: d, p: p };
+            var dim = filt && p.product !== filt;
+            var txt = p.code + ' · ' + p.product + ' · ' + dias(d) + (p.partial ? ' · incompleto' : '');
+            cells += '<button class="cell b' + bd + (p.partial ? ' part' : '') + (dim ? ' dim' : '') + (S.detailId === p.id ? ' on' : '') + '"' + at + ' title="' + esc(txt) + '" aria-label="' + esc(b.name + ', rua ' + r + ', posição ' + c + ', ' + txt) + '"><span class="pn">' + c + '</span><span class="pt">' + esc(p.product) + '</span><span class="ag">' + d + 'd</span></button>';
+          } else {
+            var sel = S.placing.block === b.id && S.placing.street === r && S.placing.pos === c;
+            cells += '<button class="cell free' + (sel ? ' sel' : '') + '"' + at + ' aria-label="' + esc(b.name + ', rua ' + r + ', posição ' + c + ', livre') + '"><span class="pn">' + c + '</span></button>';
+          }
+        }
+        lanes += '<div class="st ' + ori + '" style="--n:' + b.positions + '"><span class="sn" title="Rua ' + r + '">' + r + '</span>' + cells + '</div>';
+      }
+      return '<div class="blk" style="grid-area:' + esc(b.area) + '"><h3>' + esc(b.name) + ' · ' + (b.streets * b.positions) + '</h3><div class="sts ' + ori + '">' + lanes + '</div></div>';
+    }).join('');
+    var legend = [1, 2, 3, 4].map(function (b) { return '<span class="chip b' + b + '">' + bandLabel(b) + ' · ' + counts[b] + '</span>'; }).join('') +
+      '<span class="chip b0">Livres · ' + (total - used) + '</span><span class="chip b0">○ incompleto</span>';
+    var codes = cfg.products.map(function (p) { return p.code; });
+    Object.keys(byProd).forEach(function (c) { if (codes.indexOf(c) < 0) codes.push(c); });
+    var pchips = '<button class="chip b0" data-act="pfilter" data-code="" aria-pressed="' + (!filt) + '">Todos · ' + used + '</button>' + codes.map(function (c) {
+      return '<button class="chip b0" data-act="pfilter" data-code="' + esc(c) + '" aria-pressed="' + (filt === c) + '">' + esc(c) + ' · ' + (byProd[c] || 0) + '</button>';
+    }).join('');
+    var old = oldest ? '<p class="hint">Mais antigo no estoque: <strong class="mono">' + esc(oldest.p.code) + '</strong> (' + esc(oldest.p.product) + ', ' + dias(oldest.d) + ') em ' + esc(locText(oldest.p)) + ' <button class="btn small" data-act="see" data-id="' + esc(oldest.p.id) + '">Ver</button></p>' : '';
+    $('#v-mapa').innerHTML = '<div style="display:grid;gap:16px"><div class="card"><h2>Mapa do estoque · ' + used + ' de ' + total + ' posições ocupadas</h2>' +
+      '<div class="sub" style="margin-top:0">Cor = idade desde a data de produção</div><div class="legend">' + legend + '</div>' +
+      '<div class="sub">Produto (toque para destacar no mapa)</div><div class="legend">' + pchips + '</div>' + old + '</div>' +
+      '<div class="card"><div class="pscroll"><div class="plan">' + blocks + '</div></div><p class="hint">Cada faixa entre as linhas pretas é uma rua (número cinza). O número pequeno dentro da posição é o lugar na rua, contado do início da rua: de cima para baixo nos setores A a D e da esquerda para a direita no setor E.</p></div>' + dockHtml() + '</div>';
+  }
+
+  function dockHtml() {
+    var d = S.detailId && S.pallets[S.detailId];
+    if (d) return detailDock(Object.assign({ id: S.detailId }, d));
+    var opts = placeOptions();
+    if (!opts.length) return '';
+    var pid = S.placing.palletId || opts[0].id, cur = S.pallets[pid], moving = cur && cur.status === 'estoque';
+    var pl = S.placing, bObj = blockOf(pl.block), occ = occMap(), rowOpts = '', colOpts = '';
+    if (bObj) {
+      for (var r = 1; r <= bObj.streets; r++) {
+        var free = 0; for (var c = 1; c <= bObj.positions; c++) if (!occ.get(ck(bObj.id, r, c))) free++;
+        rowOpts += '<option value="' + r + '"' + (pl.street === r ? ' selected' : '') + (free ? '' : ' disabled') + '>Rua ' + r + ' (' + free + (free === 1 ? ' livre' : ' livres') + ')</option>';
+      }
+      if (pl.street) for (var k = 1; k <= bObj.positions; k++) if (!occ.get(ck(bObj.id, pl.street, k))) colOpts += '<option value="' + k + '"' + (pl.pos === k ? ' selected' : '') + '>Posição ' + k + '</option>';
+    }
+    var ready = pl.block && pl.street && pl.pos;
+    return '<div class="dock"><div class="dock-h"><strong>' + (moving ? 'Mover palete' : 'Endereçar palete') + '</strong>' + (moving ? '<button class="btn small" data-act="cancel-place">Cancelar</button>' : '') + '</div>' +
+      '<div class="fields"><label>Palete<select data-sel="palletId">' + opts.map(function (o) { return '<option value="' + esc(o.id) + '"' + (o.id === pid ? ' selected' : '') + '>' + esc(o.code + ' · ' + o.product) + (o.status === 'estoque' ? ' (em ' + esc(locText(o)) + ')' : '') + '</option>'; }).join('') + '</select></label>' +
+      '<label>Setor<select data-sel="block"><option value="">Escolha…</option>' + S.cfg.blocks.map(function (b) { return '<option value="' + esc(b.id) + '"' + (b.id === pl.block ? ' selected' : '') + '>' + esc(b.name) + '</option>'; }).join('') + '</select></label>' +
+      '<label>Rua<select data-sel="row"' + (bObj ? '' : ' disabled') + '><option value="">Escolha…</option>' + rowOpts + '</select></label>' +
+      '<label>Posição livre<select data-sel="col"' + (pl.street ? '' : ' disabled') + '><option value="">Escolha…</option>' + colOpts + '</select></label></div>' +
+      '<div class="row"><button class="btn primary" data-act="place-confirm"' + (ready ? '' : ' disabled') + '>' + (ready ? 'Guardar em ' + esc(bObj.name) + ' · Rua ' + pl.street + ' · Posição ' + pl.pos : 'Guardar palete') + '</button></div>' +
+      '<p class="hint">Você também pode tocar numa posição livre do mapa para escolhê-la.</p></div>';
+  }
+  function detailDock(p) {
+    var d = ageDays(p.prodDate), b = band(d), a = S.arm;
+    var hist = (p.history || []).slice().reverse().map(function (h) { return '<li>' + esc(fmtDT(h.at)) + ' · ' + esc(h.from) + ' → ' + esc(h.to) + '</li>'; }).join('');
+    return '<div class="dock"><div class="dock-h"><div class="row"><strong class="mono">' + esc(p.code) + '</strong><span class="chip b' + b + '">' + dias(d) + '</span>' + (p.partial ? '<span class="chip b0">incompleto</span>' : '') + '</div><button class="btn small" data-act="close-dock">Fechar</button></div>' +
+      '<dl class="kv"><dt>Produto</dt><dd>' + esc(p.product) + (p.productName ? ' · ' + esc(p.productName) : '') + '</dd>' +
+      '<dt>Local</dt><dd>' + esc(locOrState(p)) + '</dd>' +
+      '<dt>Produção</dt><dd>' + esc(fmtDay(p.prodDate)) + '</dd><dt>Entrada</dt><dd>' + esc(fmtDT(p.createdAt)) + '</dd>' +
+      '<dt>Caixas</dt><dd>' + p.count + ' de ' + p.size + '</dd><dt>Ovos</dt><dd>' + nf(eggsOf(p)) + ' (' + nf(p.eggsPerBox) + ' por caixa)</dd></dl>' +
+      '<details><summary>Ver as ' + p.count + ' caixas</summary><ul class="codes">' + (p.boxes || []).map(function (c, i) { return '<li><span class="i mono">' + (i + 1) + '</span><span class="c mono">' + esc(c) + '</span></li>'; }).join('') + '</ul></details>' +
+      (hist ? '<details><summary>Histórico de locais</summary><ul class="hist">' + hist + '</ul></details>' : '') +
+      '<div class="row">' + (p.status !== 'saida' ? '<button class="btn primary" data-act="move" data-id="' + esc(p.id) + '">' + (p.status === 'estoque' ? 'Mover' : 'Endereçar') + '</button>' : '') +
+      (p.status !== 'saida' ? '<button class="btn' + (a === 'out:' + p.id ? ' danger armed' : '') + '" data-act="out" data-id="' + esc(p.id) + '">' + (a === 'out:' + p.id ? 'Confirmar saída' : 'Dar saída') + '</button>' : '') +
+      '<button class="btn danger' + (a === 'del:' + p.id ? ' armed' : '') + '" data-act="del" data-id="' + esc(p.id) + '">' + (a === 'del:' + p.id ? 'Confirmar exclusão' : 'Excluir registro') + '</button></div></div>';
+  }
+
+  function renderEstoque() {
+    var q = S.q.trim().toLowerCase();
+    var rows = list().filter(function (p) { return S.showOut || p.status !== 'saida'; }).filter(function (p) {
+      if (!q) return true;
+      return p.code.toLowerCase().indexOf(q) >= 0 || String(p.product).toLowerCase().indexOf(q) >= 0 || (p.boxes || []).some(function (b) { return b.toLowerCase().indexOf(q) >= 0; });
+    }).sort(function (a, b) { return a.prodDate < b.prodDate ? -1 : a.prodDate > b.prodDate ? 1 : (a.createdAt < b.createdAt ? -1 : 1); });
+    if (!rows.length) { $('#est-dyn').innerHTML = '<div class="card"><p style="margin:0">' + (q ? 'Nenhum palete ou caixa encontrado para essa busca.' : 'Nenhum palete no estoque ainda. Bipe as caixas na aba Entrada para criar o primeiro.') + '</p></div>'; return; }
+    $('#est-dyn').innerHTML = '<div class="tscroll"><table><thead><tr><th>Palete</th><th>Produto</th><th class="num">Caixas</th><th class="num">Ovos</th><th>Produção</th><th>Idade</th><th>Local</th><th></th></tr></thead><tbody>' + rows.map(function (p) {
+      var d = ageDays(p.prodDate), chip = p.status === 'saida' ? '<span class="chip b0">saiu</span>' : '<span class="chip b' + band(d) + '">' + dias(d) + '</span>';
+      var hit = q && p.code.toLowerCase().indexOf(q) < 0 && String(p.product).toLowerCase().indexOf(q) < 0 ? '<div class="hint">caixa encontrada neste palete</div>' : '';
+      return '<tr><td class="mono"><strong>' + esc(p.code) + '</strong>' + hit + '</td><td>' + esc(p.product) + '</td><td class="num mono">' + p.count + (p.partial ? ' <span class="chip b0">incompleto</span>' : '') + '</td><td class="num mono">' + nf(eggsOf(p)) + '</td><td>' + esc(fmtDay(p.prodDate)) + '</td><td>' + chip + '</td><td>' + esc(locOrState(p)) + '</td><td><button class="btn small" data-act="see" data-id="' + esc(p.id) + '">Ver no mapa</button></td></tr>';
+    }).join('') + '</tbody></table></div>';
+  }
+
+  function renderProducao() {
+    var f = S.rep.field, from = S.rep.from, to = S.rep.to;
+    var dayOf = function (p) { return f === 'entry' ? localDay(p.createdAt) : p.prodDate; };
+    var rows = list().filter(function (p) { var d = dayOf(p); return d && (!from || d >= from) && (!to || d <= to); });
+    var tot = { pallets: 0, boxes: 0, eggs: 0 }, byProd = {}, byDay = {};
+    rows.forEach(function (p) {
+      var e = eggsOf(p), d = dayOf(p);
+      tot.pallets++; tot.boxes += p.count; tot.eggs += e;
+      var bp = byProd[p.product] || (byProd[p.product] = { name: p.productName || '', pallets: 0, boxes: 0, eggs: 0, epb: {} });
+      bp.pallets++; bp.boxes += p.count; bp.eggs += e; bp.epb[p.eggsPerBox] = 1;
+      var bd = byDay[d] || (byDay[d] = { pallets: 0, boxes: 0, eggs: 0, prod: {} });
+      bd.pallets++; bd.boxes += p.count; bd.eggs += e; bd.prod[p.product] = (bd.prod[p.product] || 0) + e;
+    });
+    var el = $('#rep-dyn');
+    if (!rows.length) { el.innerHTML = '<div class="card"><p style="margin:0">Nenhum palete neste período.</p></div>'; return; }
+    var codes = Object.keys(byProd).sort();
+    var label = f === 'entry' ? 'Entrada' : 'Produção';
+    var prodTable = '<div><h3 class="h3t">Por produto</h3><div class="tscroll"><table><thead><tr><th>Produto</th><th class="num">Paletes</th><th class="num">Caixas</th><th class="num">Ovos por caixa</th><th class="num">Ovos</th></tr></thead><tbody>' + codes.map(function (c) {
+      var b = byProd[c], ks = Object.keys(b.epb);
+      return '<tr><td><strong>' + esc(c) + '</strong>' + (b.name ? '<div class="hint">' + esc(b.name) + '</div>' : '') + '</td><td class="num mono">' + nf(b.pallets) + '</td><td class="num mono">' + nf(b.boxes) + '</td><td class="num mono">' + (ks.length === 1 ? nf(ks[0]) : 'vários') + '</td><td class="num mono">' + nf(b.eggs) + '</td></tr>';
+    }).join('') + '</tbody><tfoot><tr><td>Total</td><td class="num mono">' + nf(tot.pallets) + '</td><td class="num mono">' + nf(tot.boxes) + '</td><td></td><td class="num mono">' + nf(tot.eggs) + '</td></tr></tfoot></table></div></div>';
+    var days = Object.keys(byDay).sort().reverse();
+    var dayTable = '<div><h3 class="h3t">Por dia (' + label.toLowerCase() + ')</h3><div class="tscroll"><table><thead><tr><th>Data</th>' + codes.map(function (c) { return '<th class="num">Ovos ' + esc(c) + '</th>'; }).join('') + '<th class="num">Ovos total</th><th class="num">Caixas</th><th class="num">Paletes</th></tr></thead><tbody>' + days.map(function (d) {
+      var b = byDay[d];
+      return '<tr><td>' + esc(fmtDay(d)) + '</td>' + codes.map(function (c) { return '<td class="num mono">' + (b.prod[c] ? nf(b.prod[c]) : '—') + '</td>'; }).join('') + '<td class="num mono"><strong>' + nf(b.eggs) + '</strong></td><td class="num mono">' + nf(b.boxes) + '</td><td class="num mono">' + nf(b.pallets) + '</td></tr>';
+    }).join('') + '</tbody></table></div></div>';
+    var sorted = rows.slice().sort(function (a, b) { var da = dayOf(a), db = dayOf(b); return da < db ? 1 : da > db ? -1 : (a.createdAt < b.createdAt ? 1 : -1); });
+    var trace = '<div><h3 class="h3t">Rastreabilidade por palete</h3><div class="tscroll"><table><thead><tr><th>Palete</th><th>Produto</th><th>Produção</th><th>Entrada</th><th class="num">Caixas</th><th class="num">Ovos</th><th>Situação</th></tr></thead><tbody>' + sorted.map(function (p) {
+      return '<tr><td class="mono"><strong>' + esc(p.code) + '</strong></td><td>' + esc(p.product) + '</td><td>' + esc(fmtDay(p.prodDate)) + '</td><td>' + esc(fmtDT(p.createdAt)) + '</td><td class="num mono">' + p.count + (p.partial ? ' <span class="chip b0">incompleto</span>' : '') + '</td><td class="num mono">' + nf(eggsOf(p)) + '</td><td>' + esc(locOrState(p)) + '</td></tr>';
+    }).join('') + '</tbody></table></div></div>';
+    el.innerHTML = '<div class="kpis"><div class="kpi"><span>Ovos</span><b>' + nf(tot.eggs) + '</b></div><div class="kpi"><span>Caixas</span><b>' + nf(tot.boxes) + '</b></div><div class="kpi"><span>Paletes</span><b>' + nf(tot.pallets) + '</b></div></div>' + prodTable + dayTable + trace;
+  }
+
+  function renderAjustes() {
+    var c = S.cfgDraft || (S.cfgDraft = clone(S.cfg));
+    $('#v-ajustes').innerHTML = '<div class="cfg">' +
+      '<div class="card cfg"><h2>Produtos e ovos por caixa</h2>' + c.products.map(function (p, i) {
+        return '<div class="line"><label>Sigla<input data-cfg="pcode" data-i="' + i + '" value="' + esc(p.code) + '" maxlength="12"></label><label>Nome<input data-cfg="pname" data-i="' + i + '" value="' + esc(p.name) + '"></label><label>Ovos/caixa<input type="number" inputmode="numeric" min="1" data-cfg="pegg" data-i="' + i + '" value="' + p.eggsPerBox + '"></label><button class="btn small danger" data-act="cfg-rm-prod" data-i="' + i + '" aria-label="Remover ' + esc(p.code) + '">Remover</button></div>';
+      }).join('') + '<div class="row"><button class="btn" data-act="cfg-add-prod">Adicionar produto</button></div><p class="hint">Cada palete guarda o valor de ovos por caixa da época da entrada. Mudar aqui vale só para os próximos paletes.</p></div>' +
+      '<div class="card cfg"><h2>Setores do galpão</h2>' + c.blocks.map(function (b, i) {
+        return '<div class="line blkl"><label>Nome do setor<input data-cfg="bname" data-i="' + i + '" value="' + esc(b.name) + '"></label><label>Ruas<input type="number" inputmode="numeric" min="1" max="60" data-cfg="bstreets" data-i="' + i + '" value="' + b.streets + '"></label><label>Posições por rua<input type="number" inputmode="numeric" min="1" max="30" data-cfg="bpos" data-i="' + i + '" value="' + b.positions + '"></label><label>Sentido das ruas<select data-cfg="borient" data-i="' + i + '"><option value="v"' + (b.orient === 'v' ? ' selected' : '') + '>Vertical (colunas)</option><option value="h"' + (b.orient === 'h' ? ' selected' : '') + '>Horizontal (linhas)</option></select></label><label>Lugar na planta<select data-cfg="barea" data-i="' + i + '">' + AREAS.map(function (a) { return '<option value="' + a[0] + '"' + (b.area === a[0] ? ' selected' : '') + '>' + a[1] + '</option>'; }).join('') + '</select></label><button class="btn small danger" data-act="cfg-rm-blk" data-i="' + i + '" aria-label="Remover ' + esc(b.name) + '">Remover</button></div>';
+      }).join('') + '<div class="row"><button class="btn" data-act="cfg-add-blk">Adicionar setor</button></div><p class="hint">Cada setor ocupa um dos 5 lugares da planta, sem repetir. Uma rua é a faixa entre as linhas pretas; as posições ficam dentro dela.</p></div>' +
+      '<div class="card cfg"><h2>Palete</h2><label>Caixas por palete completo<input type="number" inputmode="numeric" min="1" max="200" data-cfg="palletSize" value="' + c.palletSize + '"></label></div>' +
+      '<div class="card cfg"><h2>Cores por idade (dias desde a produção)</h2><div class="three">' +
+      [['Verde até', 0, 'b1'], ['Amarelo até', 1, 'b2'], ['Laranja até', 2, 'b3']].map(function (x) { return '<label><span class="chip ' + x[2] + '" style="justify-self:start">' + x[0] + '</span><input type="number" inputmode="numeric" min="0" data-cfg="band" data-i="' + x[1] + '" value="' + c.bands[x[1]] + '"></label>'; }).join('') +
+      '</div><p class="hint">Acima do valor de laranja a posição fica vermelha.</p></div>' +
+      '<div class="row"><button class="btn primary" data-act="cfg-save">Salvar ajustes</button><button class="btn" data-act="cfg-reset">Desfazer alterações</button></div><div id="cfg-msg" class="hint" role="status"></div></div>';
+  }
+  function cfgMsg(t, bad) { var m = $('#cfg-msg'); if (m) { m.textContent = t; m.style.color = bad ? 'var(--err)' : 'var(--ok)'; } }
+  async function saveCfg() {
+    var c = S.cfgDraft, seen = {}, i;
+    if (!c.products.length) return cfgMsg('Mantenha pelo menos um produto.', true);
+    for (i = 0; i < c.products.length; i++) {
+      var p = c.products[i], code = String(p.code || '').trim().toUpperCase(), nm = String(p.name || '').trim();
+      if (!code) return cfgMsg('Todo produto precisa de uma sigla.', true);
+      if (seen[code]) return cfgMsg('A sigla ' + code + ' aparece duas vezes.', true);
+      seen[code] = 1; p.code = code;
+      if (!nm) return cfgMsg('O produto ' + code + ' precisa de um nome.', true);
+      p.name = nm;
+      if (!Number.isInteger(p.eggsPerBox) || p.eggsPerBox < 1) return cfgMsg('Ovos por caixa de ' + code + ' deve ser um número inteiro maior que zero.', true);
+    }
+    if (!c.blocks.length) return cfgMsg('Mantenha pelo menos um setor.', true);
+    var names = {};
+    for (i = 0; i < c.blocks.length; i++) {
+      var b = c.blocks[i], bn = String(b.name || '').trim();
+      if (!bn) return cfgMsg('Todo setor precisa de um nome.', true);
+      if (names[bn.toLowerCase()]) return cfgMsg('Há dois setores chamados “' + bn + '”.', true);
+      names[bn.toLowerCase()] = 1; b.name = bn;
+      if (!Number.isInteger(b.streets) || b.streets < 1 || b.streets > 60) return cfgMsg('Ruas de ' + bn + ' devem ficar entre 1 e 60.', true);
+      if (!Number.isInteger(b.positions) || b.positions < 1 || b.positions > 30) return cfgMsg('Posições de ' + bn + ' devem ficar entre 1 e 30.', true);
+      if (names['#area#' + b.area]) return cfgMsg('Dois setores estão no mesmo lugar da planta. Escolha lugares diferentes.', true);
+      names['#area#' + b.area] = 1;
+    }
+    if (!Number.isInteger(c.palletSize) || c.palletSize < 1 || c.palletSize > 200) return cfgMsg('Caixas por palete deve ficar entre 1 e 200.', true);
+    var bd = c.bands;
+    if (!bd.every(function (x) { return Number.isInteger(x) && x >= 0; }) || !(bd[0] < bd[1] && bd[1] < bd[2])) return cfgMsg('Os limites de cor devem ser inteiros e crescentes (verde < amarelo < laranja).', true);
+    var lost = list().filter(function (pl) {
+      if (pl.status !== 'estoque') return false;
+      var bk = c.blocks.filter(function (x) { return x.id === pl.block; })[0];
+      return !bk || pl.street > bk.streets || pl.pos > bk.positions;
+    })[0];
+    if (lost) return cfgMsg('O palete ' + lost.code + ' está em ' + locText(lost) + ', que deixaria de existir. Mova-o antes de salvar.', true);
+    if (!store) return cfgMsg('Ainda conectando. Tente de novo em instantes.', true);
+    try { await store.setConfig({ palletSize: c.palletSize, blocks: c.blocks, products: c.products, bands: c.bands }); }
+    catch (e) { return cfgMsg(errText(e), true); }
+    cfgMsg('Ajustes salvos.', false);
+  }
+
+  /* ---------- eventos ---------- */
+  var actions = {
+    tab: function (t) { S.tab = t.dataset.tab; S.arm = ''; renderTabs(); renderTab(); if (S.tab === 'entrada') $('#scan').focus(); },
+    cell: function (t) {
+      var bk = t.dataset.block, row = +t.dataset.street, col = +t.dataset.pos, p = occMap().get(ck(bk, row, col));
+      S.arm = '';
+      if (p) { S.detailId = p.id; S.placing = emptyPlacing(); }
+      else {
+        var opts = placeOptions();
+        if (!opts.length) return toast('Nenhum palete aguardando endereço. Bipe um palete na aba Entrada.');
+        S.detailId = ''; S.placing.block = bk; S.placing.street = row; S.placing.pos = col;
+        if (!S.placing.palletId || !opts.some(function (o) { return o.id === S.placing.palletId; })) S.placing.palletId = opts[0].id;
+      }
+      renderMapa();
+    },
+    pfilter: function (t) { S.mapProd = t.dataset.code || ''; renderMapa(); },
+    'close-dock': function () { S.detailId = ''; S.arm = ''; renderMapa(); },
+    'cancel-place': function () { S.placing = emptyPlacing(); renderMapa(); },
+    move: function (t) { S.placing = Object.assign(emptyPlacing(), { palletId: t.dataset.id }); S.detailId = ''; S.arm = ''; renderMapa(); },
+    'place-now': function (t) { S.tab = 'mapa'; S.placing = Object.assign(emptyPlacing(), { palletId: t.dataset.id }); S.detailId = ''; renderTabs(); renderTab(); window.scrollTo(0, 0); },
+    'place-confirm': confirmPlace,
+    out: function (t) { if (S.arm === 'out:' + t.dataset.id) palletOut(t.dataset.id); else { S.arm = 'out:' + t.dataset.id; renderMapa(); } },
+    del: function (t) { if (S.arm === 'del:' + t.dataset.id) palletDelete(t.dataset.id); else { S.arm = 'del:' + t.dataset.id; renderMapa(); } },
+    see: function (t) { S.tab = 'mapa'; S.detailId = t.dataset.id; S.placing = emptyPlacing(); renderTabs(); renderTab(); window.scrollTo(0, 0); },
+    close: function () {
+      if (S.draft.length < S.cfg.palletSize && S.arm !== 'close') { S.arm = 'close'; return renderEntrada(); }
+      closePallet();
+    },
+    clear: function () { if (S.arm !== 'clear') { S.arm = 'clear'; return renderEntrada(); } S.draft = []; saveDraft(); S.arm = ''; $('#scanmsg').textContent = ''; renderEntrada(); $('#scan').focus(); },
+    rm: function (t) { S.draft.splice(+t.dataset.i, 1); saveDraft(); S.arm = ''; renderEntrada(); },
+    sim: function () {
+      if (!store) return;
+      var tag = Date.now().toString(36);
+      while (S.draft.length < S.cfg.palletSize) S.draft.push('TESTE-' + tag + '-' + String(S.draft.length + 1).padStart(3, '0'));
+      saveDraft(); closePallet();
+    },
+    'rep-preset': function (t) {
+      var n = +t.dataset.days;
+      if (!n) { S.rep.from = ''; S.rep.to = ''; }
+      else { var d = new Date(); d.setDate(d.getDate() - (n - 1)); S.rep.from = dstr(d); S.rep.to = todayStr(); }
+      $('#r-from').value = S.rep.from; $('#r-to').value = S.rep.to; renderProducao();
+    },
+    'cfg-add-prod': function () { S.cfgDraft.products.push({ code: '', name: '', eggsPerBox: 0 }); renderAjustes(); },
+    'cfg-rm-prod': function (t) { S.cfgDraft.products.splice(+t.dataset.i, 1); renderAjustes(); },
+    'cfg-add-blk': function () {
+      var usedA = {}; S.cfgDraft.blocks.forEach(function (b) { usedA[b.area] = 1; });
+      var free = AREAS.filter(function (a) { return !usedA[a[0]]; })[0];
+      if (!free) return cfgMsg('A planta só tem 5 lugares e todos estão em uso. Remova ou mude um setor antes.', true);
+      S.cfgDraft.blocks.push({ id: 'b' + Date.now().toString(36), name: 'Setor ' + (S.cfgDraft.blocks.length + 1), streets: 4, positions: 4, orient: 'v', area: free[0] });
+      renderAjustes();
+    },
+    'cfg-rm-blk': function (t) { S.cfgDraft.blocks.splice(+t.dataset.i, 1); renderAjustes(); },
+    'cfg-save': saveCfg,
+    'cfg-reset': function () { S.cfgDraft = clone(S.cfg); renderAjustes(); }
+  };
+  document.addEventListener('click', function (e) {
+    var t = e.target.closest('[data-act]');
+    if (!t) return;
+    var fn = actions[t.dataset.act];
+    if (fn) fn(t);
+  });
+  document.addEventListener('change', function (e) {
+    var el = e.target;
+    if (el.dataset && el.dataset.sel) {
+      var k = el.dataset.sel;
+      if (k === 'col') S.placing.pos = el.value ? +el.value : null;
+      else if (k === 'row') { S.placing.street = el.value ? +el.value : null; S.placing.pos = null; }
+      else if (k === 'block') { S.placing.block = el.value; S.placing.street = null; S.placing.pos = null; }
+      else S.placing.palletId = el.value;
+      renderMapa();
+    } else if (el.id === 'showout') { S.showOut = el.checked; renderEstoque(); }
+  });
+  document.addEventListener('input', function (e) {
+    var el = e.target, ds = el.dataset || {};
+    if (el.id === 'q') { S.q = el.value; renderEstoque(); return; }
+    if (ds.ent) { S.entry[ds.ent] = el.value; saveDraft(); renderEntrada(); return; }
+    if (ds.rep) { S.rep[ds.rep] = el.value; renderProducao(); return; }
+    var k = ds.cfg;
+    if (!k || !S.cfgDraft) return;
+    var i = +ds.i, v = el.value === '' ? NaN : Number(el.value), c = S.cfgDraft;
+    if (k === 'pcode') c.products[i].code = el.value;
+    else if (k === 'pname') c.products[i].name = el.value;
+    else if (k === 'pegg') c.products[i].eggsPerBox = v;
+    else if (k === 'bname') c.blocks[i].name = el.value;
+    else if (k === 'bstreets') c.blocks[i].streets = v;
+    else if (k === 'bpos') c.blocks[i].positions = v;
+    else if (k === 'borient') c.blocks[i].orient = el.value === 'h' ? 'h' : 'v';
+    else if (k === 'barea') c.blocks[i].area = areaOk(el.value) ? el.value : 'tl';
+    else if (k === 'palletSize') c.palletSize = v;
+    else if (k === 'band') c.bands[i] = v;
+  });
+  $('#scan').addEventListener('keydown', function (e) {
+    if (e.key !== 'Enter' && e.key !== 'Tab') return;
+    var v = this.value;
+    if (!v.trim()) return;
+    e.preventDefault(); this.value = ''; onScan(v);
+  });
+
+  /* ---------- início ---------- */
+  var d0 = loadDraft();
+  S.draft = d0.codes || [];
+  S.entry.prodDate = todayStr();
+  if (S.draft.length) {
+    if (d0.product) S.entry.product = d0.product;
+    if (d0.prodDate) S.entry.prodDate = d0.prodDate;
+    if (d0.entryAt) S.entry.entryAt = d0.entryAt;
+  }
+  var wk = new Date(); wk.setDate(wk.getDate() - 6);
+  S.rep.from = dstr(wk); S.rep.to = todayStr();
+  $('#e-prod').value = S.entry.prodDate; $('#e-at').value = S.entry.entryAt;
+  $('#r-from').value = S.rep.from; $('#r-to').value = S.rep.to;
+  fillProducts();
+  renderStatus(); renderTabs(); renderTab();
+  $('#scan').focus();
+  setTimeout(function () { if (!S.loaded) { S.slow = true; renderStatus(); } }, 10000);
+  (async function () {
+    var db = null;
+    try { db = window.claude && window.claude.use ? await window.claude.use('db') : null; } catch (e) { db = null; }
+    store = db ? dbStore(db) : localStore();
+    S.mode = store.mode;
+    store.start();
+  })();
+})();
+</script>
+
+</body></html>
